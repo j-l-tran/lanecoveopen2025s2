@@ -2,7 +2,7 @@ import streamlit as st
 from pathlib import Path
 import streamlit.components.v1 as components
 
-# --- Streamlit page config ---
+# --- Streamlit Page Config ---
 st.set_page_config(
     page_title="Lane Cove Open 2025 - Season 2",
     layout="wide",
@@ -17,25 +17,25 @@ footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# Title (optional)
+# Optional page title in Streamlit
 st.title("Lane Cove Open 2025 - Season 2")
 
-# Load your HTML
+# Load index.html
 html_file = Path(__file__).parent / "index.html"
 html_content = html_file.read_text()
 
-# Wrap HTML so that it fills the iframe and removes internal scrolling
+# Wrap HTML to remove internal scrolling and fill iframe
 full_html = f"""
 <style>
 html, body, #root {{
     height: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* disables internal scrolling */
+    overflow: hidden; /* disable internal scrollbars */
 }}
 </style>
 {html_content}
 """
 
-# Set a very tall iframe to allow long content to scroll naturally
+# Set a large height so Streamlit handles scrolling naturally
 components.html(full_html, height=10000, scrolling=False)
