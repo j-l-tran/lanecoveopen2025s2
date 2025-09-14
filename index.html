@@ -4,22 +4,18 @@
     <meta charset="UTF-8" />
     <title>Lane Cove Open 2025 - Season 2</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React + ReactDOM CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Babel for JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   </head>
   <body class="bg-gray-100">
     <div id="root"></div>
 
-    <script type="text/babel">
-      const { useState } = React;
+    <script type="text/javascript">
+      const { useState, useEffect } = React;
 
       function TournamentApp() {
-        // Updated default doubles teams
+        // --- Teams ---
         const [players, setPlayers] = useState([
           "Player 1 & 2",
           "Player 3 & 4",
@@ -27,9 +23,43 @@
           "Player 7 & 8"
         ]);
         const [newPlayer, setNewPlayer] = useState("");
+
+        // --- Matches ---
         const [matches, setMatches] = useState([]);
         const [roundsCount, setRoundsCount] = useState(0);
-        const [playoffs, setPlayoffs] = useState({ semifinals: [], final: null });
+
+        // --- Playoffs ---
+        const [semis, setSemis] = useState([]);
+        const [final, setFinal] = useState([]);
+        const [champion, setChampion] = useState("");
+
+        // --- Broadcast simulation (localStorage) ---
+        useEffect(() => {
+          const stored = localStorage.getItem("matches");
+          if (stored) setMatches(JSON.parse(stored));
+          const storedSemis = localStorage.getItem("semis");
+          if (storedSemis) setSemis(JSON.parse(storedSemis));
+          const storedFinal = localStorage.getItem("final");
+          if (storedFinal) setFinal(JSON.parse(storedFinal));
+          const storedChamp = localStorage.getItem("champion");
+          if (storedChamp) setChampion(storedChamp);
+        }, []);
+
+        useEffect(() => {
+          localStorage.setItem("matches", JSON.stringify(matches));
+        }, [matches]);
+
+        useEffect(() => {
+          localStorage.setItem("semis", JSON.stringify(semis));
+        }, [semis]);
+
+        useEffect(() => {
+          localStorage.setItem("final", JSON.stringify(final));
+        }, [final]);
+
+        useEffect(() => {
+          localStorage.setItem("champion", champion);
+        }, [champion]);
 
         // --- Round-robin generator ---
         function generateRoundRobin(names) {
@@ -58,9 +88,12 @@
           const s = generateRoundRobin(players);
           setMatches(s);
           setRoundsCount(players.length % 2 === 0 ? players.length - 1 : players.length);
-          setPlayoffs({ semifinals: [], final: null }); // reset playoffs
+          setSemis([]);
+          setFinal([]);
+          setChampion("");
         }
 
+        // --- Update match ---
         function updateMatch(idx, field, value) {
           setMatches(m =>
             m.map((x, i) => {
@@ -77,7 +110,7 @@
           );
         }
 
-        // standings
+        // --- Standings ---
         function standings() {
           const table = {};
           players.forEach(p => table[p] = { name: p, played: 0, wins: 0, losses: 0, draws: 0, score: 0 });
@@ -85,197 +118,121 @@
             if (!m.winner) return;
             table[m.playerA].played++;
             table[m.playerB].played++;
-            if (m.winner === m.playerA) { 
-              table[m.playerA].wins++; 
-              table[m.playerB].losses++; 
-              table[m.playerA].score += 2; 
-            }
-            else if (m.winner === m.playerB) { 
-              table[m.playerB].wins++; 
-              table[m.playerA].losses++; 
-              table[m.playerB].score += 2; 
-            }
-            else { 
-              table[m.playerA].draws++; 
-              table[m.playerB].draws++; 
-              table[m.playerA].score++; 
-              table[m.playerB].score++; 
-            }
+            if (m.winner === m.playerA) { table[m.playerA].wins++; table[m.playerB].losses++; table[m.playerA].score += 2; }
+            else if (m.winner === m.playerB) { table[m.playerB].wins++; table[m.playerA].losses++; table[m.playerB].score += 2; }
+            else { table[m.playerA].draws++; table[m.playerB].draws++; table[m.playerA].score++; table[m.playerB].score++; }
           });
-          return Object.values(table).sort((a,b)=> 
-            b.score - a.score || b.wins - a.wins || a.name.localeCompare(b.name)
-          );
+          return Object.values(table).sort((a,b)=> b.score - a.score || b.wins - a.wins || a.name.localeCompare(b.name));
         }
 
-        // --- Playoffs ---
-        function handleGeneratePlayoffs() {
+        // --- Generate Playoffs (top 4 teams) ---
+        function generatePlayoffs() {
           const top4 = standings().slice(0,4).map(s => s.name);
-          if(top4.length < 4) return;
-
-          setPlayoffs({
-            semifinals: [
-              { playerA: top4[0], playerB: top4[3], scoreA: "", scoreB: "", winner: null },
-              { playerA: top4[1], playerB: top4[2], scoreA: "", scoreB: "", winner: null }
-            ],
-            final: null
-          });
+          const newSemis = [
+            { playerA: top4[0], playerB: top4[3], scoreA: "", scoreB: "", winner: null },
+            { playerA: top4[1], playerB: top4[2], scoreA: "", scoreB: "", winner: null }
+          ];
+          setSemis(newSemis);
+          setFinal([]);
+          setChampion("");
         }
 
-        function updatePlayoffMatch(stage, idx, field, value) {
-          setPlayoffs(prev => {
-            const copy = {...prev};
-            copy[stage][idx][field] = value;
-
-            const a = parseFloat(copy[stage][idx].scoreA);
-            const b = parseFloat(copy[stage][idx].scoreB);
-
-            if(!isNaN(a) && !isNaN(b)) {
-              copy[stage][idx].winner = a > b ? copy[stage][idx].playerA : copy[stage][idx].playerB;
+        // --- Update playoff match ---
+        function updatePlayoff(set, idx, field, value, callback) {
+          set(prev => prev.map((x,i)=>{
+            if(i!==idx) return x;
+            const upd = {...x,[field]:value};
+            const a=parseFloat(upd.scoreA), b=parseFloat(upd.scoreB);
+            if(!isNaN(a)&&!isNaN(b)){
+              if(a>b) upd.winner=upd.playerA;
+              else if(b>a) upd.winner=upd.playerB;
+              else upd.winner="DRAW";
             }
-
-            // Automatically generate final if semifinals are done
-            if(stage === "semifinals" && copy.semifinals.every(m => m.winner)) {
-              copy.final = [
-                { playerA: copy.semifinals[0].winner, playerB: copy.semifinals[1].winner, scoreA: "", scoreB: "", winner: null }
-              ];
-            }
-
-            return copy;
-          });
+            callback(upd);
+            return upd;
+          }))
         }
+
+        // --- Advance winners to final ---
+        useEffect(()=>{
+          if(semis.length===2 && semis.every(m=>m.winner)){
+            setFinal([{ playerA: semis[0].winner, playerB: semis[1].winner, scoreA:"", scoreB:"", winner:null }])
+          }
+        }, [semis]);
+
+        // --- Determine champion ---
+        useEffect(()=>{
+          if(final.length===1 && final[0].winner){
+            setChampion(final[0].winner);
+          }
+        }, [final]);
 
         return (
-          <div className="max-w-5xl mx-auto bg-white shadow rounded-lg p-6 my-6">
+          <div className="max-w-6xl mx-auto bg-white shadow rounded-lg p-6 my-6">
             <h1 className="text-3xl font-bold mb-6 text-center">Lane Cove Open 2025 - Season 2</h1>
 
             {/* Players */}
             <section className="mb-6">
-              <h2 className="font-semibold">Teams (Doubles)</h2>
+              <h2 className="font-semibold">Teams</h2>
               <div className="flex gap-2 mt-2">
                 <input className="border rounded px-2 py-1 flex-1" placeholder="Add team"
                   value={newPlayer}
-                  onChange={e => setNewPlayer(e.target.value)}
-                  onKeyDown={e => { 
-                    if (e.key==="Enter" && newPlayer.trim()) { 
-                      setPlayers(p=>[...p,newPlayer.trim()]); 
-                      setNewPlayer(""); 
-                    } 
-                  }}
+                  onChange={e=>setNewPlayer(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter" && newPlayer.trim()){ setPlayers(p=>[...p,newPlayer.trim()]); setNewPlayer("") } }}
                 />
                 <button className="px-3 py-1 bg-blue-600 text-white rounded"
-                  onClick={() => { 
-                    if(newPlayer.trim()){
-                      setPlayers(p=>[...p,newPlayer.trim()]);
-                      setNewPlayer("");
-                    } 
-                  }}>
-                  Add
-                </button>
+                  onClick={()=>{if(newPlayer.trim()){ setPlayers(p=>[...p,newPlayer.trim()]); setNewPlayer("") }}}>Add</button>
               </div>
               <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
                 {players.map((p,i)=>(
                   <div key={i} className="flex items-center gap-2 border rounded p-2">
                     <div className="flex-1">{p}</div>
                     <button className="text-sm px-2 py-1 bg-red-500 text-white rounded"
-                      onClick={()=> setPlayers(prev => prev.filter((_,idx)=> idx!==i))}>
-                      Remove
-                    </button>
+                      onClick={()=> setPlayers(prev=>prev.filter((_,idx)=>idx!==i))}>Remove</button>
                   </div>
                 ))}
               </div>
               <div className="mt-3 flex gap-2">
-                <button className="px-3 py-1 bg-indigo-600 text-white rounded" onClick={handleGenerateSchedule}>
-                  Generate Round-Robin Schedule
-                </button>
-                {matches.length>0 && (
-                  <button className="px-3 py-1 bg-green-600 text-white rounded" onClick={handleGeneratePlayoffs}>
-                    Generate Semi-Finals & Final
-                  </button>
-                )}
+                <button className="px-3 py-1 bg-indigo-600 text-white rounded" onClick={handleGenerateSchedule}>Generate Round-Robin</button>
+                <button className="px-3 py-1 bg-green-600 text-white rounded" onClick={generatePlayoffs}>Generate Semi-Finals & Final</button>
               </div>
             </section>
 
-            {/* Matches */}
+            {/* Round-Robin Matches */}
             <section className="mb-6">
-              <h2 className="font-semibold">Round-Robin Matches</h2>
+              <h2 className="font-semibold">Matches</h2>
               {matches.length===0 && <div className="text-sm text-gray-500">No matches yet.</div>}
-              {matches.length>0 && (
-                <div className="grid gap-3">
-                  {Array.from({length: roundsCount}, (_,r)=> r+1).map(r=>(
-                    <div key={r} className="border rounded p-3">
-                      <div className="font-medium">Round {r}</div>
-                      <div className="mt-2 space-y-2">
-                        {matches.filter(m=>m.round===r).map((m,idx)=>(
-                          <div key={idx} className="flex items-center gap-2">
-                            <div className="w-40">{m.playerA}</div>
-                            <input className="w-16 border rounded px-2" value={m.scoreA} placeholder="score"
-                              onChange={e=>updateMatch(matches.indexOf(m),"scoreA",e.target.value)}/>
-                            <span>vs</span>
-                            <input className="w-16 border rounded px-2" value={m.scoreB} placeholder="score"
-                              onChange={e=>updateMatch(matches.indexOf(m),"scoreB",e.target.value)}/>
-                            <div className="w-40">{m.playerB}</div>
-                            {m.winner && <span className="ml-2 text-green-600 text-sm">Winner: {m.winner}</span>}
-                          </div>
-                        ))}
+              {matches.length>0 && Array.from({length: roundsCount}, (_,r)=> r+1).map(r=>(
+                <div key={r} className="border rounded p-3 mb-2">
+                  <div className="font-medium">Round {r}</div>
+                  <div className="mt-2 space-y-2">
+                    {matches.filter(m=>m.round===r).map((m,idx)=>(
+                      <div key={idx} className="flex items-center gap-2">
+                        <div className="w-40">{m.playerA}</div>
+                        <input className="w-16 border rounded px-2" value={m.scoreA} placeholder="score"
+                          onChange={e=>updateMatch(matches.indexOf(m),"scoreA",e.target.value)}/>
+                        <span>vs</span>
+                        <input className="w-16 border rounded px-2" value={m.scoreB} placeholder="score"
+                          onChange={e=>updateMatch(matches.indexOf(m),"scoreB",e.target.value)}/>
+                        <div className="w-40">{m.playerB}</div>
+                        {m.winner && <span className="ml-2 text-green-600 text-sm">Winner: {m.winner}</span>}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              )}
+              ))}
             </section>
 
-            {/* Playoffs */}
-            {playoffs.semifinals.length > 0 && (
-              <section className="mb-6">
-                <h2 className="font-semibold">Semi-Finals</h2>
-                {playoffs.semifinals.map((m, idx) => (
-                  <div key={idx} className="flex items-center gap-2 mt-2">
-                    <div className="w-40">{m.playerA}</div>
-                    <input className="w-16 border rounded px-2" value={m.scoreA} 
-                      onChange={e => updatePlayoffMatch("semifinals", idx, "scoreA", e.target.value)} />
-                    <span>vs</span>
-                    <input className="w-16 border rounded px-2" value={m.scoreB} 
-                      onChange={e => updatePlayoffMatch("semifinals", idx, "scoreB", e.target.value)} />
-                    <div className="w-40">{m.playerB}</div>
-                    {m.winner && <span className="ml-2 text-green-600">Winner: {m.winner}</span>}
-                  </div>
-                ))}
-              </section>
-            )}
-
-            {playoffs.final && playoffs.final.length > 0 && (
-              <section className="mb-6">
-                <h2 className="font-semibold">Final</h2>
-                {playoffs.final.map((m, idx) => (
-                  <div key={idx} className="flex items-center gap-2 mt-2">
-                    <div className="w-40">{m.playerA}</div>
-                    <input className="w-16 border rounded px-2" value={m.scoreA} 
-                      onChange={e => updatePlayoffMatch("final", idx, "scoreA", e.target.value)} />
-                    <span>vs</span>
-                    <input className="w-16 border rounded px-2" value={m.scoreB} 
-                      onChange={e => updatePlayoffMatch("final", idx, "scoreB", e.target.value)} />
-                    <div className="w-40">{m.playerB}</div>
-                    {m.winner && <span className="ml-2 text-green-600">Winner: {m.winner}</span>}
-                  </div>
-                ))}
-              </section>
-            )}
-
             {/* Standings */}
-            <section>
+            <section className="mb-6">
               <h2 className="font-semibold">Standings</h2>
               <table className="w-full border mt-2">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border px-2">Pos</th>
-                    <th className="border px-2">Team</th>
-                    <th className="border px-2">Played</th>
-                    <th className="border px-2">Wins</th>
-                    <th className="border px-2">Losses</th>
-                    <th className="border px-2">Draws</th>
-                    <th className="border px-2">Score</th>
-                  </tr>
-                </thead>
+                <thead><tr className="bg-gray-100">
+                  <th className="border px-2">Pos</th><th className="border px-2">Team</th>
+                  <th className="border px-2">Played</th><th className="border px-2">Wins</th>
+                  <th className="border px-2">Losses</th><th className="border px-2">Draws</th>
+                  <th className="border px-2">Score</th>
+                </tr></thead>
                 <tbody>
                   {standings().map((s,i)=>(
                     <tr key={s.name} className="odd:bg-gray-50">
@@ -291,6 +248,59 @@
                 </tbody>
               </table>
             </section>
+
+            {/* Ladder */}
+            <section className="mb-6">
+              <h2 className="font-semibold">Ladder / Playoffs</h2>
+              {semis.length===0 && <div className="text-sm text-gray-500">Generate semi-finals to view ladder.</div>}
+              {semis.length>0 && (
+                <div className="grid md:grid-cols-3 gap-4 mt-2">
+                  {/* Semi-finals */}
+                  <div className="space-y-2">
+                    <h3 className="font-medium text-center">Semi-Finals</h3>
+                    {semis.map((m,i)=>(
+                      <div key={i} className="border p-2 rounded">
+                        <div className="flex items-center gap-2">
+                          <div className="w-40">{m.playerA}</div>
+                          <input className="w-16 border rounded px-2" value={m.scoreA}
+                            onChange={e=>updatePlayoff(setSemis,i,"scoreA",e.target.value, ()=>{})}/>
+                          <span>vs</span>
+                          <input className="w-16 border rounded px-2" value={m.scoreB}
+                            onChange={e=>updatePlayoff(setSemis,i,"scoreB",e.target.value, ()=>{})}/>
+                          <div className="w-40">{m.playerB}</div>
+                        </div>
+                        {m.winner && <div className="text-green-600 text-sm text-center">Winner: {m.winner}</div>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Final */}
+                  <div className="space-y-2">
+                    <h3 className="font-medium text-center">Final</h3>
+                    {final.length>0 && final.map((m,i)=>(
+                      <div key={i} className="border p-2 rounded">
+                        <div className="flex items-center gap-2">
+                          <div className="w-40">{m.playerA}</div>
+                          <input className="w-16 border rounded px-2" value={m.scoreA}
+                            onChange={e=>updatePlayoff(setFinal,i,"scoreA",e.target.value, ()=>{})}/>
+                          <span>vs</span>
+                          <input className="w-16 border rounded px-2" value={m.scoreB}
+                            onChange={e=>updatePlayoff(setFinal,i,"scoreB",e.target.value, ()=>{})}/>
+                          <div className="w-40">{m.playerB}</div>
+                        </div>
+                        {m.winner && <div className="text-green-600 text-sm text-center">Winner: {m.winner}</div>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Champion */}
+                  <div className="space-y-2 text-center">
+                    <h3 className="font-medium">Champion</h3>
+                    <div className="border p-4 rounded text-xl text-green-700">{champion || "-"}</div>
+                  </div>
+                </div>
+              )}
+            </section>
           </div>
         );
       }
@@ -299,4 +309,3 @@
     </script>
   </body>
 </html>
-
