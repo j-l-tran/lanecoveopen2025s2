@@ -37,5 +37,8 @@ html, body, #root {{
 {html_content}
 """
 
+# Get height from query params if provided, else default to 3000
+height = int(st.query_params.get("height", [3000])[0])
+
 # Render HTML; set scrolling=False so Streamlit handles it
-components.html(full_html, height=st.experimental_get_query_params().get("height", [800])[0], scrolling=False)
+components.html(full_html, height=height, scrolling=False)
