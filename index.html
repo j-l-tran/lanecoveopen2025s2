@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Lane Cove Open 2025 - Season 2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React + ReactDOM CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState } = React;
+
+      function TournamentApp() {
+        // Updated default doubles teams
+        const [players, setPlayers] = useState([
+          "Player 1 & 2",
+          "Player 3 & 4",
+          "Player 5 & 6",
+          "Player 7 & 8"
+        ]);
+        const [newPlayer, setNewPlayer] = useState("");
+        const [matches, setMatches] = useState([]);
+        const [roundsCount, setRoundsCount] = useState(0);
+        const [playoffs, setPlayoffs] = useState({ semifinals: [], final: null });
+
+        // --- Round-robin generator ---
+        function generateRoundRobin(names) {
+          const n = names.length;
+          if (n < 2) return [];
+          const list = [...names];
+          if (n % 2 === 1) list.push("BYE");
+          const rounds = list.length - 1;
+          const half = list.length / 2;
+          let arr = [...list];
+          const schedule = [];
+
+          for (let r = 0; r < rounds; r++) {
+            for (let i = 0; i < half; i++) {
+              const a = arr[i], b = arr[arr.length - 1 - i];
+              if (a !== "BYE" && b !== "BYE") {
+                schedule.push({ round: r + 1, playerA: a, playerB: b, scoreA: "", scoreB: "", winner: null });
+              }
+            }
+            arr = [arr[0], arr[arr.length - 1], ...arr.slice(1, -1)];
+          }
+          return schedule;
+        }
+
+        function handleGenerateSchedule() {
+          const s = generateRoundRobin(players);
+          setMatches(s);
+          setRoundsCount(players.length % 2 === 0 ? players.length - 1 : players.length);
+          setPlayoffs({ semifinals: [], final: null }); // reset playoffs
+        }
+
+        function updateMatch(idx, field, value) {
+          setMatches(m =>
+            m.map((x, i) => {
+              if (i !== idx) return x;
+              const upd = { ...x, [field]: value };
+              const a = parseFloat(upd.scoreA), b = parseFloat(upd.scoreB);
+              if (!isNaN(a) && !isNaN(b)) {
+                if (a > b) upd.winner = upd.playerA;
+                else if (b > a) upd.winner = upd.playerB;
+                else upd.winner = "DRAW";
+              }
+              return upd;
+            })
+          );
+        }
+
+        // standings
+        function standings() {
+          const table = {};
+          players.forEach(p => table[p] = { name: p, played: 0, wins: 0, losses: 0, draws: 0, score: 0 });
+          matches.forEach(m => {
+            if (!m.winner) return;
+            table[m.playerA].played++;
+            table[m.playerB].played++;
+            if (m.winner === m.playerA) { 
+              table[m.playerA].wins++; 
+              table[m.playerB].losses++; 
+              table[m.playerA].score += 2; 
+            }
+            else if (m.winner === m.playerB) { 
+              table[m.playerB].wins++; 
+              table[m.playerA].losses++; 
+              table[m.playerB].score += 2; 
+            }
+            else { 
+              table[m.playerA].draws++; 
+              table[m.playerB].draws++; 
+              table[m.playerA].score++; 
+              table[m.playerB].score++; 
+            }
+          });
+          return Object.values(table).sort((a,b)=> 
+            b.score - a.score || b.wins - a.wins || a.name.localeCompare(b.name)
+          );
+        }
+
+        // --- Playoffs ---
+        function handleGeneratePlayoffs() {
+          const top4 = standings().slice(0,4).map(s => s.name);
+          if(top4.length < 4) return;
+
+          setPlayoffs({
+            semifinals: [
+              { playerA: top4[0], playerB: top4[3], scoreA: "", scoreB: "", winner: null },
+              { playerA: top4[1], playerB: top4[2], scoreA: "", scoreB: "", winner: null }
+            ],
+            final: null
+          });
+        }
+
+        function updatePlayoffMatch(stage, idx, field, value) {
+          setPlayoffs(prev => {
+            const copy = {...prev};
+            copy[stage][idx][field] = value;
+
+            const a = parseFloat(copy[stage][idx].scoreA);
+            const b = parseFloat(copy[stage][idx].scoreB);
+
+            if(!isNaN(a) && !isNaN(b)) {
+              copy[stage][idx].winner = a > b ? copy[stage][idx].playerA : copy[stage][idx].playerB;
+            }
+
+            // Automatically generate final if semifinals are done
+            if(stage === "semifinals" && copy.semifinals.every(m => m.winner)) {
+              copy.final = [
+                { playerA: copy.semifinals[0].winner, playerB: copy.semifinals[1].winner, scoreA: "", scoreB: "", winner: null }
+              ];
+            }
+
+            return copy;
+          });
+        }
+
+        return (
+          <div className="max-w-5xl mx-auto bg-white shadow rounded-lg p-6 my-6">
+            <h1 className="text-3xl font-bold mb-6 text-center">Lane Cove Open 2025 - Season 2</h1>
+
+            {/* Players */}
+            <section className="mb-6">
+              <h2 className="font-semibold">Teams (Doubles)</h2>
+              <div className="flex gap-2 mt-2">
+                <input className="border rounded px-2 py-1 flex-1" placeholder="Add team"
+                  value={newPlayer}
+                  onChange={e => setNewPlayer(e.target.value)}
+                  onKeyDown={e => { 
+                    if (e.key==="Enter" && newPlayer.trim()) { 
+                      setPlayers(p=>[...p,newPlayer.trim()]); 
+                      setNewPlayer(""); 
+                    } 
+                  }}
+                />
+                <button className="px-3 py-1 bg-blue-600 text-white rounded"
+                  onClick={() => { 
+                    if(newPlayer.trim()){
+                      setPlayers(p=>[...p,newPlayer.trim()]);
+                      setNewPlayer("");
+                    } 
+                  }}>
+                  Add
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                {players.map((p,i)=>(
+                  <div key={i} className="flex items-center gap-2 border rounded p-2">
+                    <div className="flex-1">{p}</div>
+                    <button className="text-sm px-2 py-1 bg-red-500 text-white rounded"
+                      onClick={()=> setPlayers(prev => prev.filter((_,idx)=> idx!==i))}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button className="px-3 py-1 bg-indigo-600 text-white rounded" onClick={handleGenerateSchedule}>
+                  Generate Round-Robin Schedule
+                </button>
+                {matches.length>0 && (
+                  <button className="px-3 py-1 bg-green-600 text-white rounded" onClick={handleGeneratePlayoffs}>
+                    Generate Semi-Finals & Final
+                  </button>
+                )}
+              </div>
+            </section>
+
+            {/* Matches */}
+            <section className="mb-6">
+              <h2 className="font-semibold">Round-Robin Matches</h2>
+              {matches.length===0 && <div className="text-sm text-gray-500">No matches yet.</div>}
+              {matches.length>0 && (
+                <div className="grid gap-3">
+                  {Array.from({length: roundsCount}, (_,r)=> r+1).map(r=>(
+                    <div key={r} className="border rounded p-3">
+                      <div className="font-medium">Round {r}</div>
+                      <div className="mt-2 space-y-2">
+                        {matches.filter(m=>m.round===r).map((m,idx)=>(
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className="w-40">{m.playerA}</div>
+                            <input className="w-16 border rounded px-2" value={m.scoreA} placeholder="score"
+                              onChange={e=>updateMatch(matches.indexOf(m),"scoreA",e.target.value)}/>
+                            <span>vs</span>
+                            <input className="w-16 border rounded px-2" value={m.scoreB} placeholder="score"
+                              onChange={e=>updateMatch(matches.indexOf(m),"scoreB",e.target.value)}/>
+                            <div className="w-40">{m.playerB}</div>
+                            {m.winner && <span className="ml-2 text-green-600 text-sm">Winner: {m.winner}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Playoffs */}
+            {playoffs.semifinals.length > 0 && (
+              <section className="mb-6">
+                <h2 className="font-semibold">Semi-Finals</h2>
+                {playoffs.semifinals.map((m, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mt-2">
+                    <div className="w-40">{m.playerA}</div>
+                    <input className="w-16 border rounded px-2" value={m.scoreA} 
+                      onChange={e => updatePlayoffMatch("semifinals", idx, "scoreA", e.target.value)} />
+                    <span>vs</span>
+                    <input className="w-16 border rounded px-2" value={m.scoreB} 
+                      onChange={e => updatePlayoffMatch("semifinals", idx, "scoreB", e.target.value)} />
+                    <div className="w-40">{m.playerB}</div>
+                    {m.winner && <span className="ml-2 text-green-600">Winner: {m.winner}</span>}
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {playoffs.final && playoffs.final.length > 0 && (
+              <section className="mb-6">
+                <h2 className="font-semibold">Final</h2>
+                {playoffs.final.map((m, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mt-2">
+                    <div className="w-40">{m.playerA}</div>
+                    <input className="w-16 border rounded px-2" value={m.scoreA} 
+                      onChange={e => updatePlayoffMatch("final", idx, "scoreA", e.target.value)} />
+                    <span>vs</span>
+                    <input className="w-16 border rounded px-2" value={m.scoreB} 
+                      onChange={e => updatePlayoffMatch("final", idx, "scoreB", e.target.value)} />
+                    <div className="w-40">{m.playerB}</div>
+                    {m.winner && <span className="ml-2 text-green-600">Winner: {m.winner}</span>}
+                  </div>
+                ))}
+              </section>
+            )}
+
+            {/* Standings */}
+            <section>
+              <h2 className="font-semibold">Standings</h2>
+              <table className="w-full border mt-2">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border px-2">Pos</th>
+                    <th className="border px-2">Team</th>
+                    <th className="border px-2">Played</th>
+                    <th className="border px-2">Wins</th>
+                    <th className="border px-2">Losses</th>
+                    <th className="border px-2">Draws</th>
+                    <th className="border px-2">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {standings().map((s,i)=>(
+                    <tr key={s.name} className="odd:bg-gray-50">
+                      <td className="border px-2">{i+1}</td>
+                      <td className="border px-2">{s.name}</td>
+                      <td className="border px-2">{s.played}</td>
+                      <td className="border px-2">{s.wins}</td>
+                      <td className="border px-2">{s.losses}</td>
+                      <td className="border px-2">{s.draws}</td>
+                      <td className="border px-2">{s.score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<TournamentApp/>);
+    </script>
+  </body>
+</html>
+
