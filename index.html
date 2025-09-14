@@ -14,7 +14,7 @@
   <div id="root"></div>
 
   <script type="text/javascript">
-    const { useState, useEffect } = React;
+    const { useState } = React;
 
     function TournamentApp() {
       const [players, setPlayers] = useState([
@@ -26,28 +26,8 @@
       const [newPlayer, setNewPlayer] = useState("");
       const [matches, setMatches] = useState([]);
       const [roundsCount, setRoundsCount] = useState(0);
-      const [semis, setSemis] = useState([]);
-      const [final, setFinal] = useState([]);
-      const [champion, setChampion] = useState("");
 
-      // Broadcast via localStorage
-      useEffect(() => {
-        const storedMatches = localStorage.getItem("matches");
-        if (storedMatches) setMatches(JSON.parse(storedMatches));
-        const storedSemis = localStorage.getItem("semis");
-        if (storedSemis) setSemis(JSON.parse(storedSemis));
-        const storedFinal = localStorage.getItem("final");
-        if (storedFinal) setFinal(JSON.parse(storedFinal));
-        const storedChampion = localStorage.getItem("champion");
-        if (storedChampion) setChampion(storedChampion);
-      }, []);
-
-      useEffect(() => localStorage.setItem("matches", JSON.stringify(matches)), [matches]);
-      useEffect(() => localStorage.setItem("semis", JSON.stringify(semis)), [semis]);
-      useEffect(() => localStorage.setItem("final", JSON.stringify(final)), [final]);
-      useEffect(() => localStorage.setItem("champion", champion), [champion]);
-
-      // Round-robin generator
+      // --- Round-robin generator ---
       function generateRoundRobin(names) {
         const n = names.length;
         if (n < 2) return [];
@@ -74,14 +54,11 @@
         const s = generateRoundRobin(players);
         setMatches(s);
         setRoundsCount(players.length % 2 === 0 ? players.length - 1 : players.length);
-        setSemis([]);
-        setFinal([]);
-        setChampion("");
       }
 
       function updateMatch(idx, field, value) {
         setMatches(m =>
-          m.map((x,i) => {
+          m.map((x, i) => {
             if (i !== idx) return x;
             const upd = { ...x, [field]: value };
             const a = parseFloat(upd.scoreA), b = parseFloat(upd.scoreB);
@@ -109,48 +86,11 @@
         return Object.values(table).sort((a,b)=> b.score - a.score || b.wins - a.wins || a.name.localeCompare(b.name));
       }
 
-      function generatePlayoffs() {
-        const top4 = standings().slice(0,4).map(s => s.name);
-        const newSemis = [
-          { playerA: top4[0], playerB: top4[3], scoreA: "", scoreB: "", winner: null },
-          { playerA: top4[1], playerB: top4[2], scoreA: "", scoreB: "", winner: null }
-        ];
-        setSemis(newSemis);
-        setFinal([]);
-        setChampion("");
-      }
-
-      function updatePlayoff(set, idx, field, value) {
-        set(prev => prev.map((x,i)=>{
-          if(i!==idx) return x;
-          const upd = {...x,[field]:value};
-          const a=parseFloat(upd.scoreA), b=parseFloat(upd.scoreB);
-          if(!isNaN(a)&&!isNaN(b)){
-            if(a>b) upd.winner=upd.playerA;
-            else if(b>a) upd.winner=upd.playerB;
-            else upd.winner="DRAW";
-          }
-          return upd;
-        }))
-      }
-
-      useEffect(()=>{
-        if(semis.length===2 && semis.every(m=>m.winner)){
-          setFinal([{ playerA: semis[0].winner, playerB: semis[1].winner, scoreA:"", scoreB:"", winner:null }])
-        }
-      }, [semis]);
-
-      useEffect(()=>{
-        if(final.length===1 && final[0].winner){
-          setChampion(final[0].winner);
-        }
-      }, [final]);
-
       return (
         React.createElement("div", {class:"max-w-6xl mx-auto bg-white shadow rounded-lg p-6 my-6"},
           React.createElement("h1", {class:"text-3xl font-bold mb-6 text-center"}, "Lane Cove Open 2025 - Season 2"),
 
-          // Teams Section
+          // Players Section
           React.createElement("section", {class:"mb-6"},
             React.createElement("h2", {class:"font-semibold"},"Teams"),
             React.createElement("div", {class:"flex gap-2 mt-2"},
@@ -161,10 +101,7 @@
                 onChange:e=>setNewPlayer(e.target.value),
                 onKeyDown:e=>{ if(e.key==="Enter" && newPlayer.trim()){ setPlayers(p=>[...p,newPlayer.trim()]); setNewPlayer("") } }
               }),
-              React.createElement("button", {
-                class:"px-3 py-1 bg-blue-600 text-white rounded",
-                onClick:()=>{if(newPlayer.trim()){ setPlayers(p=>[...p,newPlayer.trim()]); setNewPlayer("") }}
-              }, "Add")
+              React.createElement("button", {class:"px-3 py-1 bg-blue-600 text-white rounded", onClick:()=>{if(newPlayer.trim()){ setPlayers(p=>[...p,newPlayer.trim()]); setNewPlayer("") }}}, "Add")
             ),
             React.createElement("div", {class:"mt-3 grid grid-cols-2 md:grid-cols-4 gap-2"},
               players.map((p,i)=>React.createElement("div", {key:i, class:"flex items-center gap-2 border rounded p-2"},
@@ -172,13 +109,57 @@
                 React.createElement("button", {class:"text-sm px-2 py-1 bg-red-500 text-white rounded", onClick:()=> setPlayers(prev=>prev.filter((_,idx)=>idx!==i))}, "Remove")
               ))
             ),
-            React.createElement("div", {class:"mt-3 flex gap-2"},
-              React.createElement("button", {class:"px-3 py-1 bg-indigo-600 text-white rounded", onClick:handleGenerateSchedule}, "Generate Round-Robin"),
-              React.createElement("button", {class:"px-3 py-1 bg-green-600 text-white rounded", onClick:generatePlayoffs}, "Generate Semi-Finals & Final")
+            React.createElement("div", {class:"mt-3"},
+              React.createElement("button", {class:"px-3 py-1 bg-indigo-600 text-white rounded", onClick:handleGenerateSchedule}, "Generate Round-Robin")
+            )
+          ),
+
+          // Matches Section
+          React.createElement("section", {class:"mb-6"},
+            React.createElement("h2", {class:"font-semibold"},"Matches"),
+            matches.length===0
+              ? React.createElement("div", {class:"text-sm text-gray-500"}, "No matches yet.")
+              : Array.from({length: roundsCount}, (_,r)=> r+1).map(r =>
+                  React.createElement("div", {key:r, class:"border rounded p-3 mb-2"},
+                    React.createElement("div", {class:"font-medium"}, "Round " + r),
+                    matches.filter(m=>m.round===r).map((m,idx)=>
+                      React.createElement("div", {key:idx, class:"flex items-center gap-2 mt-2"},
+                        React.createElement("div", {class:"w-40"}, m.playerA),
+                        React.createElement("input", {class:"w-16 border rounded px-2", placeholder:"score", value:m.scoreA, onChange:e=>updateMatch(matches.indexOf(m),"scoreA",e.target.value)}),
+                        React.createElement("span", null, "vs"),
+                        React.createElement("input", {class:"w-16 border rounded px-2", placeholder:"score", value:m.scoreB, onChange:e=>updateMatch(matches.indexOf(m),"scoreB",e.target.value)}),
+                        React.createElement("div", {class:"w-40"}, m.playerB),
+                        m.winner && React.createElement("span", {class:"ml-2 text-green-600 text-sm"}, "Winner: " + m.winner)
+                      )
+                    )
+                  )
+                )
+          ),
+
+          // Standings Section
+          React.createElement("section", null,
+            React.createElement("h2", {class:"font-semibold"},"Standings"),
+            React.createElement("table", {class:"w-full border mt-2"},
+              React.createElement("thead", null,
+                React.createElement("tr", {class:"bg-gray-100"},
+                  ["Pos","Team","Played","Wins","Losses","Draws","Score"].map(h=>React.createElement("th", {class:"border px-2"}, h))
+                )
+              ),
+              React.createElement("tbody", null,
+                standings().map((s,i)=>
+                  React.createElement("tr", {key:s.name, class:"odd:bg-gray-50"},
+                    React.createElement("td", {class:"border px-2"}, i+1),
+                    React.createElement("td", {class:"border px-2"}, s.name),
+                    React.createElement("td", {class:"border px-2"}, s.played),
+                    React.createElement("td", {class:"border px-2"}, s.wins),
+                    React.createElement("td", {class:"border px-2"}, s.losses),
+                    React.createElement("td", {class:"border px-2"}, s.draws),
+                    React.createElement("td", {class:"border px-2"}, s.score)
+                  )
+                )
+              )
             )
           )
-
-          // You can continue adding Matches, Standings, Ladder similarly using React.createElement
         )
       )
     }
